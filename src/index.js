@@ -1,11 +1,9 @@
-import { McpAgent } from "agents/mcp";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { createMcpHandler } from "agents/mcp";
 import { z } from "zod";
 import company from '../data/company.json';
 
 const GITHUB_ASSETS = 'https://raw.githubusercontent.com/caffeineworks/caffeineworks-mcp/main/assets';
 
-// 접수번호 생성
 function generateId(service) {
   const prefix = { exploration: 'EX', redesign: 'RD', reshoring: 'BR' };
   const now = new Date();
@@ -14,13 +12,11 @@ function generateId(service) {
   return `${prefix[service] || 'XX'}-${date}-${time}`;
 }
 
-// 타임스탬프
 function getTimestamp() {
   const now = new Date();
   return now.toISOString().replace('T', ' ').slice(0, 19);
 }
 
-// JWT 액세스 토큰 발급
 async function getAccessToken(env) {
   const now = Math.floor(Date.now() / 1000);
   const header = { alg: 'RS256', typ: 'JWT' };
@@ -60,7 +56,6 @@ async function getAccessToken(env) {
   return data.access_token;
 }
 
-// Sheets 행 추가
 async function appendToSheet(sheetId, values, env) {
   const token = await getAccessToken(env);
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A1:append?valueInputOption=USER_ENTERED`, {
@@ -70,7 +65,6 @@ async function appendToSheet(sheetId, values, env) {
   });
 }
 
-// Sheets 피드백 조회
 async function getFeedback(inquiryId, env) {
   const token = await getAccessToken(env);
   const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${env.FEEDBACK_SHEET_ID}/values/A:E`, {
@@ -83,79 +77,9 @@ async function getFeedback(inquiryId, env) {
   return { id: row[0], timestamp: row[1], feedback: row[2], status: row[3], updated_at: row[4] };
 }
 
-// MCP Agent
-export class CaffeineworksMCP extends McpAgent {
-  server = new McpServer({ name: "caffeineworks", version: "1.0.0" });
-
-  async init() {
-    // 회사 소개
-    this.server.tool("get_company_info", "카페인웍스 회사 소개 및 서비스 목록을 반환합니다.", {}, async () => ({
-      content: [{ type: "text", text: JSON.stringify(company, null, 2) }],
-    }));
-
-    // 서비스 다이어그램
-    this.server.tool("get_service_diagram", "서비스 체계를 Mermaid 다이어그램으로 반환합니다.", {}, async () => {
-      const res = await fetch(`${GITHUB_ASSETS}/services.mmd`);
-      const text = await res.text();
-      return { content: [{ type: "text", text }] };
-    });
-
-    // 로고 URL
-    this.server.tool("get_logo_url", "카페인웍스 로고 이미지 URL을 반환합니다.", {
-      version: z.enum(["new", "old"]).default("new").describe("로고 버전 (new: 현행, old: 구)")
-    }, async ({ version }) => ({
-      content: [{ type: "text", text: `${GITHUB_ASSETS}/logo_${version}.png` }],
-    }));
-
-    // 문의 접수 폼
-    this.server.tool("get_inquiry_form", "서비스 문의 접수 폼 HTML을 반환합니다.", {
-      service: z.enum(["exploration", "redesign", "reshoring"]).describe("서비스 종류")
-    }, async ({ service }) => {
-      const svc = company.services.find(s => s.id === service);
-      if (!svc) return { content: [{ type: "text", text: "서비스를 찾을 수 없습니다." }] };
-      return { content: [{ type: "text", text: `다음 링크에서 문의를 접수하세요:\nhttps://caffeineworks-mcp.typica-918.workers.dev/form/${service}` }] };
-    });
-
-    // 문의 접수 처리
-    this.server.tool("submit_inquiry", "서비스 문의를 접수하고 접수번호를 발급합니다.", {
-      service: z.enum(["exploration", "redesign", "reshoring"]).describe("서비스 종류"),
-      target: z.string().optional().describe("조사대상/컨설팅영역/교육대상"),
-      scope: z.string().optional().describe("조사범위 (exploration)"),
-      area: z.string().optional().describe("컨설팅 영역 (redesign)"),
-      issue: z.string().optional().describe("현재 상황 및 핵심 문제 (redesign)"),
-      deadline: z.string().optional().describe("납기 또는 착수 희망일"),
-      headcount: z.number().optional().describe("참여 인원 (reshoring, 20명 이상)"),
-      preferred_date: z.string().optional().describe("희망 일정 (reshoring)"),
-      location: z.string().optional().describe("희망 교육 장소 (reshoring)"),
-    }, async (params) => {
-      const id = generateId(params.service);
-      const timestamp = getTimestamp();
-      const row = [id, timestamp, params.service,
-        params.target || '', params.scope || params.area || '',
-        params.issue || '', params.deadline || params.preferred_date || '',
-        params.headcount || '', params.preferred_date || '', params.location || '',
-      ];
-      await appendToSheet(this.env.INQUIRY_SHEET_ID, row, this.env);
-      await appendToSheet(this.env.FEEDBACK_SHEET_ID, [id, timestamp, '', 'pending', ''], this.env);
-      return { content: [{ type: "text", text: `접수 완료\n접수번호: ${id}\n접수일시: ${timestamp}\n\n이 번호를 메모해두세요. 검토 후 연락드립니다.` }] };
-    });
-
-    // 피드백 조회
-    this.server.tool("get_feedback", "접수번호로 검토 결과를 조회합니다.", {
-      inquiry_id: z.string().describe("접수번호 (예: BR-20260528-1423)")
-    }, async ({ inquiry_id }) => {
-      const feedback = await getFeedback(inquiry_id, this.env);
-      if (!feedback) return { content: [{ type: "text", text: "접수번호를 찾을 수 없습니다." }] };
-      return { content: [{ type: "text", text: JSON.stringify(feedback, null, 2) }] };
-    });
-  }
-}
-
-// 폼 HTML 렌더링 (브라우저 직접 접근용)
-function renderForm(serviceId, company) {
+function renderForm(serviceId) {
   const service = company.services.find(s => s.id === serviceId);
   if (!service) return '<p>서비스를 찾을 수 없습니다.</p>';
-
   const fields = {
     exploration: `
       <label>조사 대상 및 목적<textarea name="target" rows="3" required></textarea></label>
@@ -183,7 +107,6 @@ function renderForm(serviceId, company) {
       <label>희망 일정<input type="date" name="preferred_date" required></label>
       <label>희망 교육 장소<input type="text" name="location" required></label>`,
   };
-
   return `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${service.name} 문의</title>
@@ -229,29 +152,89 @@ document.getElementById('f').addEventListener('submit', async (e) => {
 </script></body></html>`;
 }
 
+const mcpHandler = createMcpHandler(
+  (server) => {
+    server.tool("get_company_info", "카페인웍스 회사 소개 및 서비스 목록", {}, async () => ({
+      content: [{ type: "text", text: JSON.stringify(company, null, 2) }],
+    }));
+
+    server.tool("get_service_diagram", "서비스 체계 Mermaid 다이어그램 반환", {}, async () => {
+      const res = await fetch(`${GITHUB_ASSETS}/services.mmd`);
+      const text = await res.text();
+      return { content: [{ type: "text", text }] };
+    });
+
+    server.tool("get_logo_url", "로고 이미지 URL 반환", {
+      version: z.enum(["new", "old"]).default("new").describe("로고 버전"),
+    }, async ({ version }) => ({
+      content: [{ type: "text", text: `${GITHUB_ASSETS}/logo_${version}.png` }],
+    }));
+
+    server.tool("submit_inquiry", "서비스 문의 접수 및 접수번호 발급", {
+      service: z.enum(["exploration", "redesign", "reshoring"]).describe("서비스 종류"),
+      target: z.string().optional(),
+      scope: z.string().optional(),
+      area: z.string().optional(),
+      issue: z.string().optional(),
+      deadline: z.string().optional(),
+      headcount: z.number().optional(),
+      preferred_date: z.string().optional(),
+      location: z.string().optional(),
+    }, async (params, { env }) => {
+      const id = generateId(params.service);
+      const timestamp = getTimestamp();
+      const row = [id, timestamp, params.service,
+        params.target || '', params.scope || params.area || '',
+        params.issue || '', params.deadline || params.preferred_date || '',
+        params.headcount || '', params.preferred_date || '', params.location || '',
+      ];
+      await appendToSheet(env.INQUIRY_SHEET_ID, row, env);
+      await appendToSheet(env.FEEDBACK_SHEET_ID, [id, timestamp, '', 'pending', ''], env);
+      return { content: [{ type: "text", text: `접수 완료\n접수번호: ${id}\n접수일시: ${timestamp}` }] };
+    });
+
+    server.tool("get_feedback", "접수번호로 검토 결과 조회", {
+      inquiry_id: z.string().describe("접수번호 (예: BR-20260528-1423)"),
+    }, async ({ inquiry_id }, { env }) => {
+      const feedback = await getFeedback(inquiry_id, env);
+      if (!feedback) return { content: [{ type: "text", text: "접수번호를 찾을 수 없습니다." }] };
+      return { content: [{ type: "text", text: JSON.stringify(feedback, null, 2) }] };
+    });
+  },
+  { name: "caffeineworks", version: "1.0.0" },
+  { transport: "httpStream" }
+);
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
-    const headers = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    };
 
     if (request.method === 'OPTIONS') return new Response(null, { headers });
 
-    // MCP 엔드포인트
-    if (path === '/mcp') return CaffeineworksMCP.serve('/mcp').fetch(request, env);
+    if (path === '/mcp') return mcpHandler(request, env);
 
-    // 폼 렌더링
     if (path.startsWith('/form/')) {
       const serviceId = path.replace('/form/', '');
-      return new Response(renderForm(serviceId, company), { headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' } });
+      return new Response(renderForm(serviceId), {
+        headers: { ...headers, 'Content-Type': 'text/html; charset=utf-8' },
+      });
     }
 
-    // 문의 접수 (폼 submit용)
     if (path === '/inquiry' && request.method === 'POST') {
       const body = await request.json();
       const id = generateId(body.service);
       const timestamp = getTimestamp();
-      const row = [id, timestamp, body.service, body.target || '', body.scope || body.area || '', body.issue || '', body.deadline || body.preferred_date || '', body.headcount || '', body.preferred_date || '', body.location || ''];
+      const row = [id, timestamp, body.service,
+        body.target || '', body.scope || body.area || '',
+        body.issue || '', body.deadline || body.preferred_date || '',
+        body.headcount || '', body.preferred_date || '', body.location || '',
+      ];
       await appendToSheet(env.INQUIRY_SHEET_ID, row, env);
       await appendToSheet(env.FEEDBACK_SHEET_ID, [id, timestamp, '', 'pending', ''], env);
       return Response.json({ id, timestamp }, { headers });
