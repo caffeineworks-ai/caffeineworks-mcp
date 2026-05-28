@@ -1,0 +1,44 @@
+{
+  "company": {
+    "name_ko": "카페인웍스주식회사",
+    "name_en": "Caffeineworks Co., LTD.",
+    "founded": "2019-02-12",
+    "address": "서울특별시 마포구 매봉산로 31, 7층 시너지움동 1인미디어파트너스 94블럭 (상암동, S-PLEX CENTER)",
+    "homepage": "https://www.caffeineworks.co",
+    "youtube": "https://www.youtube.com/@caffeineworksofficial",
+    "email": "typica@caffeineworks.co",
+    "hours": "월~금 09:00~18:00",
+    "tagline": "고객이 경영·기술·디자인에 깨어있게 한다"
+  },
+  "services": [
+    {
+      "id": "exploration",
+      "name": "Deep Exploration",
+      "description": "산업, 기술, 제품, 시장, 사용자 및 경쟁 현황에 대한 심층 조사·분석 서비스.",
+      "pricing": "건별 계약",
+      "fields": ["조사 대상 및 목적", "조사 범위", "납기 희망일"]
+    },
+    {
+      "id": "redesign",
+      "name": "Business Redesign",
+      "description": "상품 경쟁력 및 개발 체계 전반의 구조적 재설계 컨설팅. AX 혁신, 개발체계 혁신, 상품경쟁력 혁신 3개 모듈로 구성.",
+      "pricing": "건별 계약",
+      "modules": ["AX 혁신", "개발체계 혁신", "상품경쟁력 혁신"],
+      "fields": ["컨설팅 영역", "현재 상황 및 핵심 문제", "희망 착수 시점"]
+    },
+    {
+      "id": "reshoring",
+      "name": "Brain Reshoring",
+      "description": "AI 의존으로 인한 인지적 외주화에 대응하여, 정기적으로 스스로 사고하도록 훈련 체계 및 환경을 제공하는 오프라인 서비스.",
+      "pricing": "인당 150,000원 (VAT 별도)",
+      "min_headcount": 20,
+      "duration": "90분",
+      "modules": [
+        { "step": 1, "name": "Awake", "description": "Self-awareness" },
+        { "step": 2, "name": "Activate", "description": "Self-efficacy" },
+        { "step": 3, "name": "Assessment", "description": "Self-Assessment" }
+      ],
+      "fields": ["대상", "참여 인원", "희망 일정", "희망 교육 장소"]
+    }
+  ]
+}
