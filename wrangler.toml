@@ -6,6 +6,10 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 ASSETS_BASE_URL = "https://raw.githubusercontent.com/caffeineworks/caffeineworks-mcp/main/assets"
 
+[[migrations]]
+tag = "v2"
+deleted_classes = ["CaffeineworksMCP"]
+
 # 시크릿은 Cloudflare Dashboard에서 설정
 # GOOGLE_CLIENT_EMAIL
 # GOOGLE_PRIVATE_KEY
